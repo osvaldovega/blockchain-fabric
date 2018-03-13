@@ -1,0 +1,388 @@
+version: '2'
+
+services:
+
+  orderer.example.com:
+    container_name: orderer.example.com
+    image: hyperledger/fabric-orderer
+    environment:
+      - ORDERER_GENERAL_LOGLEVEL=debug
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_GENESISMETHOD=file
+      - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/fabric/composer-genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/fabric/msp
+      # ENABLE TLS
+      # - ORDERER_GENERAL_TLS_ENABLED=true
+      # - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/fabric/tls/server.key
+      # - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/fabric/tls/server.crt
+      # - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/fabric/tls/ca.crt]
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: orderer
+    ports:
+      - 7050:7050
+    volumes:
+      - ./channel-artifacts/composer-genesis.block:/var/hyperledger/fabric/composer-genesis.block
+      - ./crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/var/hyperledger/fabric/msp
+      - ./crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/:/var/hyperledger/fabric/tls
+
+
+## PORTAL CONTAINERS ##
+
+  ca.portal.example.com:
+    container_name: ca.portal.example.com
+    image: hyperledger/fabric-ca
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+      - FABRIC_CA_SERVER_CA_NAME=ca.portal.example.com
+      - FABRIC_CA_SERVER_TLS_ENABLED=true
+      - FABRIC_CA_SERVER_CA_CERTFILE=/etc/hyperledger/fabric-ca-server-config/portal.example.com-cert.pem
+      - FABRIC_CA_SERVER_CA_KEYFILE=/etc/hyperledger/fabric-ca-server-config/e5feffdc95969255a6ec7005ea7b3c4dd5fc6084b43515f5ed51a4799692739a_sk
+    ports:
+      - "7054:7054"
+    command: sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.portal.example.com-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/e5feffdc95969255a6ec7005ea7b3c4dd5fc6084b43515f5ed51a4799692739a_sk -b admin:adminpw -d'
+    volumes:
+      - ./crypto-config/peerOrganizations/portal.example.com/ca/:/etc/hyperledger/fabric-ca-server-config
+
+  couchdb0.portal:
+    container_name: couchdb0.portal
+    image: hyperledger/fabric-couchdb
+    environment:
+      - COUCHDB_USER=
+      - COUCHDB_PASSWORD=
+      # DB_URL: http://localhost:5984/member_db
+    ports:
+      - 5984:5984
+
+  peer0.portal.example.com:
+    container_name: peer0.portal.example.com
+    image: hyperledger/fabric-peer:$ARCH-1.0.4
+    environment:
+      - CORE_PEER_ID=peer0.portal.example.com
+      - CORE_PEER_ADDRESS=peer0.portal.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.portal.example.com:7051
+      - CORE_PEER_LOCALMSPID=PortalMSP
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=composer_default
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LOGGING_LEVEL=DEBUG
+      - CORE_CHAINCODE_LOGGING_LEVEL=DEBUG
+      - CORE_PEER_GOSSIP_USELEADERELECTION=true
+      - CORE_PEER_GOSSIP_ORGLEADER=false
+      - CORE_PEER_PROFILE_ENABLED=true
+      # ENABLE TLS
+      # - CORE_PEER_TLS_ENABLED=true
+      # - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      # - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      # - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      # COUCHDB
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0.portal:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start --peer-defaultchain=false
+    ports:
+      - 7051:7051
+      - 7053:7053
+    volumes:
+      - /var/run/:/host/var/run/
+      - ./channel-artifacts/:/etc/hyperledger/fabric/configtx
+      - ./crypto-config/peerOrganizations/portal.example.com/peers/peer0.portal.example.com/msp:/etc/hyperledger/fabric/msp
+      - ./crypto-config/peerOrganizations/portal.example.com/peers/peer0.portal.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config/peerOrganizations/portal.example.com/users:/etc/hyperledger/fabric/users
+    depends_on:
+      - orderer.example.com
+      - couchdb0.portal
+
+  couchdb1.portal:
+    container_name: couchdb1.portal
+    image: hyperledger/fabric-couchdb
+    environment:
+      - COUCHDB_USER=
+      - COUCHDB_PASSWORD=
+      # DB_URL: http://localhost:5984/member_db
+    ports:
+      - 6984:5984
+
+  peer1.portal.example.com:
+    container_name: peer1.portal.example.com
+    image: hyperledger/fabric-peer
+    environment:
+      - CORE_PEER_ID=peer1.portal.example.com
+      - CORE_PEER_ADDRESS=peer1.portal.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.portal.example.com:7051
+      - CORE_PEER_LOCALMSPID=PortalMSP
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=composer_default
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LOGGING_LEVEL=DEBUG
+      - CORE_CHAINCODE_LOGGING_LEVEL=DEBUG
+      - CORE_PEER_GOSSIP_USELEADERELECTION=true
+      - CORE_PEER_GOSSIP_ORGLEADER=false
+      - CORE_PEER_PROFILE_ENABLED=true
+      # ENABLE TLS
+      # - CORE_PEER_TLS_ENABLED=true
+      # - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      # - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      # - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt 
+      # COUCHDB
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1.portal:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start --peer-defaultchain=false
+    ports:
+      - 8051:7051
+      - 8053:7053
+    volumes:
+      - /var/run/:/host/var/run/
+      - ./channel-artifacts/:/etc/hyperledger/fabric/configtx
+      - ./crypto-config/peerOrganizations/portal.example.com/peers/peer1.portal.example.com/msp:/etc/hyperledger/fabric/msp
+      - ./crypto-config/peerOrganizations/portal.example.com/peers/peer1.portal.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config/peerOrganizations/portal.example.com/users:/etc/hyperledger/fabric/users
+    depends_on:
+      - orderer.example.com
+      - couchdb1.portal
+
+
+## MANUFACTURE CONTAINERS ##
+
+  ca.manufacture.example.com:
+    container_name: ca.manufacture.example.com
+    image: hyperledger/fabric-ca
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+      - FABRIC_CA_SERVER_CA_NAME=ca.manufacture.example.com
+      - FABRIC_CA_SERVER_TLS_ENABLED=true
+      - FABRIC_CA_SERVER_CA_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.manufacture.example.com-cert.pem
+      - FABRIC_CA_SERVER_CA_KEYFILE=/etc/hyperledger/fabric-ca-server-config/4e4675dc93ec295dcfce491b87d2cbf5297c3bde6e488693de8714cd588df607_sk
+    ports:
+      - "8054:7054"
+    command: sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.manufacture.example.com-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/4e4675dc93ec295dcfce491b87d2cbf5297c3bde6e488693de8714cd588df607_sk -b admin:adminpw -d'
+    volumes:
+      - ./crypto-config/peerOrganizations/manufacture.example.com/ca/:/etc/hyperledger/fabric-ca-server-config
+
+  couchdb0.manufacture:
+    container_name: couchdb0.manufacture
+    image: hyperledger/fabric-couchdb
+    environment:
+      - COUCHDB_USER=
+      - COUCHDB_PASSWORD=
+      # DB_URL: http://localhost:7984/member_db
+    ports:
+      - 7984:5984
+    
+  peer0.manufacture.example.com:
+    container_name: peer0.manufacture.example.com
+    image: hyperledger/fabric-peer
+    environment:
+      - CORE_PEER_ID=peer0.manufacture.example.com
+      - CORE_PEER_ADDRESS=peer0.manufacture.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.manufacture.example.com:7051
+      - CORE_PEER_LOCALMSPID=ManufactureMSP
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=composer_default
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LOGGING_LEVEL=DEBUG
+      - CORE_CHAINCODE_LOGGING_LEVEL=DEBUG
+      - CORE_PEER_GOSSIP_USELEADERELECTION=true
+      - CORE_PEER_GOSSIP_ORGLEADER=false
+      - CORE_PEER_PROFILE_ENABLED=true
+      # ENABLE TLS
+      # - CORE_PEER_TLS_ENABLED=true
+      # - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      # - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      # - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      # COUCHDB
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0.manufacture:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start --peer-defaultchain=false
+    ports:
+      - 9051:7051
+      - 9053:7053
+    volumes:
+      - /var/run/:/host/var/run/
+      - ./channel-artifacts/:/etc/hyperledger/fabric/configtx
+      - ./crypto-config/peerOrganizations/manufacture.example.com/peers/peer0.manufacture.example.com/msp:/etc/hyperledger/fabric/msp
+      - ./crypto-config/peerOrganizations/manufacture.example.com/peers/peer0.manufacture.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config/peerOrganizations/manufacture.example.com/users:/etc/hyperledger/fabric/users
+    depends_on:
+      - orderer.example.com
+      - couchdb0.manufacture
+
+  couchdb1.manufacture:
+    container_name: couchdb1.manufacture
+    image: hyperledger/fabric-couchdb
+    environment:
+      - COUCHDB_USER=
+      - COUCHDB_PASSWORD=
+      # DB_URL: http://localhost:7984/member_db
+    ports:
+      - 8984:5984
+
+  peer1.manufacture.example.com:
+    container_name: peer1.manufacture.example.com
+    image: hyperledger/fabric-peer
+    environment:
+      - CORE_PEER_ID=peer1.manufacture.example.com
+      - CORE_PEER_ADDRESS=peer1.manufacture.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.manufacture.example.com:7051
+      - CORE_PEER_LOCALMSPID=ManufactureMSP
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=composer_default
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LOGGING_LEVEL=DEBUG
+      - CORE_CHAINCODE_LOGGING_LEVEL=DEBUG
+      - CORE_PEER_GOSSIP_USELEADERELECTION=true
+      - CORE_PEER_GOSSIP_ORGLEADER=false
+      - CORE_PEER_PROFILE_ENABLED=true
+      # ENABLE TLS
+      # - CORE_PEER_TLS_ENABLED=true
+      # - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      # - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      # - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      # COUCHDB
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1.manufacture:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start --peer-defaultchain=false
+    ports:
+      - 10051:7051
+      - 10053:7053
+    volumes:
+      - /var/run/:/host/var/run/
+      - ./channel-artifacts/:/etc/hyperledger/fabric/configtx
+      - ./crypto-config/peerOrganizations/manufacture.example.com/peers/peer1.manufacture.example.com/msp:/etc/hyperledger/fabric/msp
+      - ./crypto-config/peerOrganizations/manufacture.example.com/peers/peer1.manufacture.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config/peerOrganizations/manufacture.example.com/users:/etc/hyperledger/fabric/users
+    depends_on:
+      - orderer.example.com
+      - couchdb1.manufacture
+
+
+## AUTHORITY CONTAINERS ##
+
+  ca.authority.example.com:
+    container_name: ca.authority.example.com
+    image: hyperledger/fabric-ca
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+      - FABRIC_CA_SERVER_CA_NAME=ca.authority.example.com
+      - FABRIC_CA_SERVER_TLS_ENABLED=true
+      - FABRIC_CA_SERVER_CA_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.authority.example.com-cert.pem
+      - FABRIC_CA_SERVER_CA_KEYFILE=/etc/hyperledger/fabric-ca-server-config/bd2e07713069591e7f861b9b9b69823899b096ca25ca08ee13a8dba6fca91c90_sk
+    ports:
+      - "9054:7054"
+    command: sh -c 'fabric-ca-server start --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.authority.example.com-cert.pem --ca.keyfile /etc/hyperledger/fabric-ca-server-config/bd2e07713069591e7f861b9b9b69823899b096ca25ca08ee13a8dba6fca91c90_sk -b admin:adminpw -d'
+    volumes:
+      - ./crypto-config/peerOrganizations/authority.example.com/ca/:/etc/hyperledger/fabric-ca-server-config
+
+  couchdb0.authority:
+    container_name: couchdb0.authority
+    image: hyperledger/fabric-couchdb
+    environment:
+      - COUCHDB_USER=
+      - COUCHDB_PASSWORD=
+      # DB_URL: http://localhost:7984/member_db
+    ports:
+      - 9984:5984
+
+  peer0.authority.example.com:
+    container_name: peer0.authority.example.com
+    image: hyperledger/fabric-peer
+    environment:
+      - CORE_PEER_ID=peer0.authority.example.com
+      - CORE_PEER_ADDRESS=peer0.authority.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.authority.example.com:7051
+      - CORE_PEER_LOCALMSPID=AuthorityMSP
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=composer_default
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LOGGING_LEVEL=DEBUG
+      - CORE_CHAINCODE_LOGGING_LEVEL=DEBUG
+      - CORE_PEER_GOSSIP_USELEADERELECTION=true
+      - CORE_PEER_GOSSIP_ORGLEADER=false
+      - CORE_PEER_PROFILE_ENABLED=true
+      # ENABLE TLS
+      # - CORE_PEER_TLS_ENABLED=true
+      # - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      # - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      # - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      # COUCHDB
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0.authority:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start --peer-defaultchain=false
+    ports:
+      - 11051:7051
+      - 11053:7053
+    volumes:
+      - /var/run/:/host/var/run/
+      - ./channel-artifacts/:/etc/hyperledger/fabric/configtx
+      - ./crypto-config/peerOrganizations/authority.example.com/peers/peer0.authority.example.com/msp:/etc/hyperledger/fabric/msp
+      - ./crypto-config/peerOrganizations/authority.example.com/peers/peer0.authority.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config/peerOrganizations/authority.example.com/users:/etc/hyperledger/fabric/users
+    depends_on:
+      - orderer.example.com
+      - couchdb0.authority
+
+  couchdb1.authority:
+    container_name: couchdb1.authority
+    image: hyperledger/fabric-couchdb
+    environment:
+      - COUCHDB_USER=
+      - COUCHDB_PASSWORD=
+      # DB_URL: http://localhost:7984/member_db
+    ports:
+      - 10984:5984
+
+  peer1.authority.example.com:
+    container_name: peer1.authority.example.com
+    image: hyperledger/fabric-peer
+    environment:
+      - CORE_PEER_ID=peer1.authority.example.com
+      - CORE_PEER_ADDRESS=peer1.authority.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.authority.example.com:7051
+      - CORE_PEER_LOCALMSPID=AuthorityMSP
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=composer_default
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_LOGGING_LEVEL=DEBUG
+      - CORE_CHAINCODE_LOGGING_LEVEL=DEBUG
+      - CORE_PEER_GOSSIP_USELEADERELECTION=true
+      - CORE_PEER_GOSSIP_ORGLEADER=false
+      - CORE_PEER_PROFILE_ENABLED=true
+      # ENABLE TLS
+      # - CORE_PEER_TLS_ENABLED=true
+      # - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      # - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      # - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      # COUCHDB
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1.authority:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start --peer-defaultchain=false
+    ports:
+      - 12051:7051
+      - 12053:7053
+    volumes:
+      - /var/run/:/host/var/run/
+      - ./channel-artifacts/:/etc/hyperledger/fabric/configtx
+      - ./crypto-config/peerOrganizations/authority.example.com/peers/peer1.authority.example.com/msp:/etc/hyperledger/fabric/msp
+      - ./crypto-config/peerOrganizations/authority.example.com/peers/peer1.authority.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config/peerOrganizations/authority.example.com/users:/etc/hyperledger/fabric/users
+    depends_on:
+      - orderer.example.com
+      - couchdb1.authority
+
